@@ -51,6 +51,18 @@ export type {
 
 export { checkBudget } from './types/budget.js';
 
+export type {
+  Message,
+  Task,
+  Effect,
+  Checkpoint,
+  CheckpointMetadata,
+} from './types/checkpoint.js';
+
+export type { CheckpointStore } from './checkpoint/index.js';
+export { SQLiteCheckpointStore } from './checkpoint/index.js';
+export { computeChecksum, verifyChecksum } from './checkpoint/index.js';
+
 export { buildHeartbeat } from './heartbeat/index.js';
 
 export { Agent } from './agent/index.js';

@@ -50,3 +50,11 @@ export type {
 } from './budget.js';
 
 export { checkBudget } from './budget.js';
+
+export type {
+  Message,
+  Task,
+  Effect,
+  Checkpoint,
+  CheckpointMetadata,
+} from './checkpoint.js';
