@@ -1,13 +1,17 @@
+export { LifecycleStateMachine, TRANSITION_TABLE } from './state-machine.js';
+export { createHookRegistry } from './hook-registry.js';
+export { IllegalTransitionError } from './errors.js';
+
 export type {
   LifecycleState,
   Trigger,
   TransitionEvent,
-} from './lifecycle.js';
+} from '../types/lifecycle.js';
 
 export {
   LIFECYCLE_STATES,
   ALL_TRIGGERS,
-} from './lifecycle.js';
+} from '../types/lifecycle.js';
 
 export type {
   HookName,
@@ -29,24 +33,8 @@ export type {
   PostRestoreEvent,
   HookEvent,
   HookRegistry,
-} from './hooks.js';
+} from '../types/hooks.js';
 
 export {
   ALL_HOOK_NAMES,
-} from './hooks.js';
-
-export type {
-  HealthStatus,
-  SemanticHealth,
-  ResourceConsumption,
-  ExecutionMetadata,
-  Heartbeat,
-} from './heartbeat.js';
-
-export type {
-  Budget,
-  BudgetSnapshot,
-  BudgetCheckResult,
-} from './budget.js';
-
-export { checkBudget } from './budget.js';
+} from '../types/hooks.js';
