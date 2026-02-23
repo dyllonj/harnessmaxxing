@@ -92,3 +92,24 @@ export type {
   MessageHandler,
   HeartbeatHandler,
 } from './types/message.js';
+
+export type {
+  RecoveryStrategyType,
+  HealthSeverity,
+  HealthPolicy,
+  HealthPolicyConfig,
+  RecoveryConfig,
+  ChildSpec,
+  SupervisorConfig,
+  HealthVerdict,
+  RecoveryResult,
+} from './types/supervisor.js';
+
+export {
+  createDefaultHealthPolicyConfig,
+  createDefaultRecoveryConfig,
+} from './types/supervisor.js';
+
+export { HealthAssessor } from './supervisor/index.js';
+export { RecoveryEngine } from './supervisor/index.js';
+export { Supervisor } from './supervisor/index.js';

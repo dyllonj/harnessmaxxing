@@ -66,3 +66,20 @@ export type {
   MessageHandler,
   HeartbeatHandler,
 } from './message.js';
+
+export type {
+  RecoveryStrategyType,
+  HealthSeverity,
+  HealthPolicy,
+  HealthPolicyConfig,
+  RecoveryConfig,
+  ChildSpec,
+  SupervisorConfig,
+  HealthVerdict,
+  RecoveryResult,
+} from './supervisor.js';
+
+export {
+  createDefaultHealthPolicyConfig,
+  createDefaultRecoveryConfig,
+} from './supervisor.js';
