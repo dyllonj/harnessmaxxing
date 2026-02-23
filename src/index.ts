@@ -52,7 +52,7 @@ export type {
 export { checkBudget } from './types/budget.js';
 
 export type {
-  Message,
+  ChatMessage,
   Task,
   Effect,
   Checkpoint,
@@ -81,3 +81,14 @@ export type {
   WatchdogConfig,
   WatchdogSignal,
 } from './agent/index.js';
+
+export type { MessageBus } from './bus/index.js';
+export { RedisMessageBus } from './bus/index.js';
+
+export type {
+  Message,
+  LifecycleCommand,
+  Subscription,
+  MessageHandler,
+  HeartbeatHandler,
+} from './types/message.js';

@@ -52,9 +52,17 @@ export type {
 export { checkBudget } from './budget.js';
 
 export type {
-  Message,
+  ChatMessage,
   Task,
   Effect,
   Checkpoint,
   CheckpointMetadata,
 } from './checkpoint.js';
+
+export type {
+  Message,
+  LifecycleCommand,
+  Subscription,
+  MessageHandler,
+  HeartbeatHandler,
+} from './message.js';
