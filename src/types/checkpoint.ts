@@ -17,7 +17,7 @@ export type Task = {
   completedAt?: number;
 };
 
-export type Effect = {
+export type CheckpointEffect = {
   id: string;
   tick: number;
   type: string;
@@ -49,8 +49,8 @@ export type Checkpoint = {
     taskQueue: Task[];
     completedTasks: Task[];
     keyValueStore: Record<string, unknown>;
-    pendingEffects: Effect[];
-    committedEffects: Effect[];
+    pendingEffects: CheckpointEffect[];
+    committedEffects: CheckpointEffect[];
   };
 
   metadata: {

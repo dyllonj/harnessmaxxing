@@ -47,14 +47,24 @@ export type {
   Budget,
   BudgetSnapshot,
   BudgetCheckResult,
+  BudgetDimension,
+  BudgetLimits,
+  EnforcerBudgetSnapshot,
+  EnforcerBudgetCheckResult,
 } from './budget.js';
 
 export { checkBudget } from './budget.js';
 
 export type {
+  EffectStatus,
+  EffectType,
+  Effect,
+} from './effect.js';
+
+export type {
   ChatMessage,
   Task,
-  Effect,
+  CheckpointEffect,
   Checkpoint,
   CheckpointMetadata,
 } from './checkpoint.js';

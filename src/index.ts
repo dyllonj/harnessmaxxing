@@ -47,14 +47,24 @@ export type {
   Budget,
   BudgetSnapshot,
   BudgetCheckResult,
+  BudgetDimension,
+  BudgetLimits,
+  EnforcerBudgetSnapshot,
+  EnforcerBudgetCheckResult,
 } from './types/budget.js';
 
 export { checkBudget } from './types/budget.js';
 
 export type {
+  EffectStatus,
+  EffectType,
+  Effect,
+} from './types/effect.js';
+
+export type {
   ChatMessage,
   Task,
-  Effect,
+  CheckpointEffect,
   Checkpoint,
   CheckpointMetadata,
 } from './types/checkpoint.js';
@@ -73,7 +83,6 @@ export type {
   TickContext,
   InboxMessage,
   InboxDrain,
-  EffectLedger,
   TickLoopConfig,
   TickLoopDeps,
   AgentLike,
@@ -113,3 +122,9 @@ export {
 export { HealthAssessor } from './supervisor/index.js';
 export { RecoveryEngine } from './supervisor/index.js';
 export { Supervisor } from './supervisor/index.js';
+
+export { EffectLedger } from './effects/index.js';
+export { BudgetEnforcer } from './budget/index.js';
+
+export { createRuntime, spawn, send, query, kill } from './runtime.js';
+export type { RuntimeHandle, RuntimeConfig, AgentDefinition, AgentStatus } from './runtime.js';

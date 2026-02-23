@@ -2,9 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { createTickLoop } from '@/agent/tick-loop';
 import type { AgentLike, TickLoopDeps } from '@/agent/tick-loop';
 import type { TickContext, InboxDrain, InboxMessage } from '@/agent/tick-context';
-import type { Budget, BudgetSnapshot } from '@/types/budget';
 import type { Heartbeat, SemanticHealth } from '@/types/heartbeat';
+import type { BudgetLimits } from '@/types/budget';
 import { LifecycleStateMachine } from '@/lifecycle/state-machine';
+import { BudgetEnforcer } from '@/budget/budget-enforcer';
+import { EffectLedger } from '@/effects/effect-ledger';
 
 type TestState = Record<string, unknown> & { count: number };
 
@@ -64,22 +66,13 @@ function createNoopLogger() {
   };
 }
 
-function makeBudget(): Budget {
+function makeDefaultLimits(): BudgetLimits {
   return {
-    tokens: { soft: 10000, hard: 20000 },
-    costUsd: { soft: 100, hard: 200 },
-    wallTimeMs: { soft: 600000, hard: 1200000 },
-    invocations: { soft: 500, hard: 1000 },
-  };
-}
-
-function makeSnapshot(overrides?: Partial<BudgetSnapshot>): BudgetSnapshot {
-  return {
-    tokensUsed: 0,
-    estimatedCostUsd: 0,
-    wallTimeMs: 0,
-    invocations: 0,
-    ...overrides,
+    tokensUsed: 20000,
+    estimatedCostUsd: 200,
+    wallTimeMs: 1200000,
+    invocations: 1000,
+    apiCalls: 500,
   };
 }
 
@@ -90,8 +83,8 @@ function createDeps(overrides?: Partial<TickLoopDeps<TestState>>): TickLoopDeps<
     heartbeatSink: vi.fn(async () => {}),
     checkpointSink: vi.fn(async () => {}),
     inboxSource: createEmptyInbox(),
-    budget: makeBudget(),
-    budgetSnapshot: makeSnapshot(),
+    budgetEnforcer: new BudgetEnforcer(makeDefaultLimits()),
+    effectLedger: new EffectLedger('test-agent'),
     clock: createControllableClock(),
     ...overrides,
   };
@@ -190,10 +183,12 @@ describe('createTickLoop', () => {
   it('hard budget fires budget_exhausted before onTick', async () => {
     const agent = createMockAgent();
     const sm = new LifecycleStateMachine('RUNNING');
+    const enforcer = new BudgetEnforcer(makeDefaultLimits());
+    enforcer.record({ tokensUsed: 20000 });
     const deps = createDeps({
       agent,
       stateMachine: sm,
-      budgetSnapshot: makeSnapshot({ tokensUsed: 20000 }),
+      budgetEnforcer: enforcer,
     });
 
     const loop = createTickLoop(deps, undefined, createNoopLogger());
@@ -206,10 +201,13 @@ describe('createTickLoop', () => {
   it('soft budget triggers forced checkpoint', async () => {
     const agent = createMockAgent();
     const checkpointSink = vi.fn(async () => {});
+    const enforcer = new BudgetEnforcer(makeDefaultLimits());
+    // 80% of 20000 = 16000, record above that
+    enforcer.record({ tokensUsed: 17000 });
     const deps = createDeps({
       agent,
       checkpointSink,
-      budgetSnapshot: makeSnapshot({ tokensUsed: 10000 }),
+      budgetEnforcer: enforcer,
     });
 
     agent.onTick = vi.fn(async () => {

@@ -1,10 +1,10 @@
 import type { LifecycleStateMachine } from '../lifecycle/state-machine.js';
 import type { LifecycleState } from '../types/lifecycle.js';
 import type { Heartbeat, SemanticHealth } from '../types/heartbeat.js';
-import type { Budget, BudgetSnapshot } from '../types/budget.js';
-import { checkBudget } from '../types/budget.js';
 import { buildHeartbeat } from '../heartbeat/heartbeat-builder.js';
-import type { InboxDrain, InboxMessage, EffectLedger, TickContext } from './tick-context.js';
+import type { BudgetEnforcer } from '../budget/budget-enforcer.js';
+import type { EffectLedger } from '../effects/effect-ledger.js';
+import type { InboxDrain, InboxMessage, TickContext } from './tick-context.js';
 
 export type TickLoopConfig = {
   baseIntervalMs: number;
@@ -36,8 +36,8 @@ export type TickLoopDeps<S extends Record<string, unknown> = Record<string, unkn
   heartbeatSink: (heartbeat: Heartbeat) => Promise<void>;
   checkpointSink: (state: unknown) => Promise<void>;
   inboxSource: InboxDrain;
-  budget: Budget;
-  budgetSnapshot: BudgetSnapshot;
+  budgetEnforcer: BudgetEnforcer;
+  effectLedger: EffectLedger;
   clock?: { delay(ms: number): Promise<void> };
 };
 
@@ -51,15 +51,6 @@ type Logger = {
   warn(obj: Record<string, unknown>, msg?: string): void;
   error(obj: Record<string, unknown>, msg?: string): void;
 };
-
-function createStubEffectLedger(): EffectLedger {
-  return {
-    register() { return 'stub'; },
-    commit() { /* no-op */ },
-    fail() { /* no-op */ },
-    pending() { return 0; },
-  };
-}
 
 function isRunnable(state: LifecycleState): boolean {
   const nonRunnable: LifecycleState[] = ['DEAD', 'SLEEPING', 'CHECKPOINTED', 'ERROR', 'ARCHIVED'];
@@ -102,14 +93,14 @@ export function createTickLoop<S extends Record<string, unknown>>(
       let hadWork = false;
 
       // Step 1: Budget check
-      const budgetResult = checkBudget(deps.budget, deps.budgetSnapshot);
-      if (budgetResult === 'hard_limit') {
-        log.warn({ budgetResult }, 'Hard budget limit reached');
+      const budgetResult = deps.budgetEnforcer.check();
+      if (budgetResult.status === 'hard_limit') {
+        log.warn({ budgetResult: budgetResult.status }, 'Hard budget limit reached');
         deps.stateMachine.apply('budget_exhausted');
         break;
       }
-      if (budgetResult === 'soft_limit') {
-        log.info({ budgetResult }, 'Soft budget limit reached, forcing checkpoint');
+      if (budgetResult.status === 'soft_limit') {
+        log.info({ budgetResult: budgetResult.status }, 'Soft budget limit reached, forcing checkpoint');
         forceCheckpoint = true;
       }
 
@@ -143,17 +134,21 @@ export function createTickLoop<S extends Record<string, unknown>>(
         break;
       }
 
+      const snapshot = deps.budgetEnforcer.snapshot();
       const ctx: TickContext<S> = {
         state: agentState,
         tick: deps.agent.tick,
         epoch: deps.agent.epoch,
         inbox: deps.inboxSource,
-        effects: createStubEffectLedger(),
+        effects: deps.effectLedger,
         sleep(ms: number) {
           signals.sleepRequested = true;
           signals.sleepMs = ms;
         },
-        budget: { ...deps.budgetSnapshot },
+        budget: snapshot,
+        recordBudget(usage: Partial<import('../types/budget.js').EnforcerBudgetSnapshot>) {
+          deps.budgetEnforcer.record(usage);
+        },
       };
 
       try {
@@ -182,18 +177,18 @@ export function createTickLoop<S extends Record<string, unknown>>(
           deps.agent.tick,
           health,
           {
-            tokensUsed: deps.budgetSnapshot.tokensUsed,
+            tokensUsed: snapshot.tokensUsed,
             tokensRemaining: 0,
-            estimatedCostUsd: deps.budgetSnapshot.estimatedCostUsd,
-            wallTimeMs: deps.budgetSnapshot.wallTimeMs,
-            apiCalls: 0,
-            toolInvocations: deps.budgetSnapshot.invocations,
+            estimatedCostUsd: snapshot.estimatedCostUsd,
+            wallTimeMs: snapshot.wallTimeMs,
+            apiCalls: snapshot.apiCalls,
+            toolInvocations: snapshot.invocations,
           },
           {
             state: deps.stateMachine.state,
             currentTask: null,
             activeTools: [],
-            pendingEffects: 0,
+            pendingEffects: deps.effectLedger.getPending().length,
             subAgents: [],
             contextWindowUsage: 0,
             tickDurationMs: 0,

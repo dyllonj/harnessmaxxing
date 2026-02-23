@@ -36,3 +36,14 @@ export function checkBudget(budget: Budget, current: BudgetSnapshot): BudgetChec
 
   return 'ok';
 }
+
+export type BudgetDimension = 'tokensUsed' | 'estimatedCostUsd' | 'wallTimeMs' | 'invocations' | 'apiCalls';
+
+export type BudgetLimits = Record<BudgetDimension, number>;
+
+export type EnforcerBudgetSnapshot = Record<BudgetDimension, number>;
+
+export type EnforcerBudgetCheckResult = {
+  status: BudgetCheckResult;
+  breachedDimensions: BudgetDimension[];
+};

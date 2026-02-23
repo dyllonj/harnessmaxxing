@@ -5,12 +5,18 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "harnessmaxxing": "./dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsc",
+    "start": "tsx src/cli/index.ts",
+    "dev": "tsx watch src/cli/index.ts",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run test/integration/",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint not configured yet'",
-    "dev": "tsx watch src/index.ts"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",

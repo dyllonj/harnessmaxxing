@@ -1,4 +1,5 @@
-import type { BudgetSnapshot } from '../types/budget.js';
+import type { EnforcerBudgetSnapshot } from '../types/budget.js';
+import type { EffectLedger } from '../effects/effect-ledger.js';
 
 export type InboxMessage = {
   id: string;
@@ -13,13 +14,6 @@ export type InboxDrain = {
   count(): number;
 };
 
-export type EffectLedger = {
-  register(intent: { type: string; action: string; parameters?: unknown; idempotencyKey?: string }): string;
-  commit(effectId: string): void;
-  fail(effectId: string, error: Error): void;
-  pending(): number;
-};
-
 export type TickContext<S> = {
   state: S;
   tick: number;
@@ -27,5 +21,8 @@ export type TickContext<S> = {
   inbox: InboxDrain;
   effects: EffectLedger;
   sleep(ms: number): void;
-  budget: BudgetSnapshot;
+  budget: EnforcerBudgetSnapshot;
+  recordBudget(usage: Partial<EnforcerBudgetSnapshot>): void;
 };
+
+export type { EffectLedger } from '../effects/effect-ledger.js';
