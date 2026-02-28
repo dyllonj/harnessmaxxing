@@ -21,7 +21,7 @@ export function registerSpawnCommand(program: Command): void {
         process.exit(1);
       }
 
-      const runtime = createRuntime({
+      const runtime = await createRuntime({
         redis: { url: opts.redisUrl },
         sqlite: { path: opts.dbPath },
       });

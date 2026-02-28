@@ -18,7 +18,7 @@ export abstract class Agent<S extends Record<string, unknown>> {
     this.tick = 0;
     this.state = null;
     this.stateMachine = new LifecycleStateMachine();
-    this.budgetSnapshot = { tokensUsed: 0, estimatedCostUsd: 0, wallTimeMs: 0, invocations: 0 };
+    this.budgetSnapshot = { tokensUsed: 0, estimatedCostUsd: 0, wallTimeMs: 0, toolInvocations: 0, apiCalls: 0 };
   }
 
   abstract onInitialize(): Promise<S>;

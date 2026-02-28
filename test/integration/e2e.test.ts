@@ -44,7 +44,7 @@ describe('E2E Integration Test', () => {
       heartbeats.push(hb);
     });
 
-    runtime = createRuntime({
+    runtime = await createRuntime({
       _bus: bus,
       _store: store,
       logger: { level: 'warn' },
@@ -60,7 +60,7 @@ describe('E2E Integration Test', () => {
         tickCount++;
 
         // Register and commit an effect each tick
-        const effectId = ctx.effects.register(
+        const effect = ctx.effects.register(
           {
             type: 'tool_call',
             action: `work-tick-${ctx.tick}`,
@@ -68,15 +68,15 @@ describe('E2E Integration Test', () => {
           },
           ctx.tick,
         );
-        ctx.effects.markExecuting(effectId);
-        ctx.effects.commit(effectId, { done: true });
+        ctx.effects.markExecuting(effect.id);
+        ctx.effects.commit(effect.id, { done: true });
 
         // Record budget
         ctx.recordBudget({
           tokensUsed: 50,
           estimatedCostUsd: 0.0005,
           apiCalls: 1,
-          invocations: 1,
+          toolInvocations: 1,
         });
 
         // Track in state
@@ -93,7 +93,7 @@ describe('E2E Integration Test', () => {
           tokensUsed: 50_000,
           estimatedCostUsd: 50,
           wallTimeMs: 600_000,
-          invocations: 10_000,
+          toolInvocations: 10_000,
           apiCalls: 5_000,
         },
         tickIntervalMs: 30,
@@ -188,7 +188,7 @@ describe('E2E Integration Test', () => {
           tokensUsed: 150,
           estimatedCostUsd: 0.001,
           apiCalls: 1,
-          invocations: 1,
+          toolInvocations: 1,
         });
         ctx.state['ticks'] = ((ctx.state['ticks'] as number) ?? 0) + 1;
       },
@@ -197,7 +197,7 @@ describe('E2E Integration Test', () => {
           tokensUsed: 500,
           estimatedCostUsd: 100,
           wallTimeMs: 600_000,
-          invocations: 10_000,
+          toolInvocations: 10_000,
           apiCalls: 5_000,
         },
         tickIntervalMs: 20,

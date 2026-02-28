@@ -83,7 +83,7 @@ export class RecoveryEngine {
 
       return {
         success: false,
-        strategy: 'escalate',
+        strategyUsed: 'escalate',
         agentId,
         details: `Max restarts (${this.config.maxRestartsPerWindow}) exceeded within window`,
       };
@@ -107,7 +107,7 @@ export class RecoveryEngine {
       case 'fresh_start':
         return {
           success: false,
-          strategy,
+          strategyUsed: strategy,
           agentId,
           details: 'not implemented',
           nextStrategy: 'escalate',
@@ -134,7 +134,7 @@ export class RecoveryEngine {
 
     return {
       success: true,
-      strategy: 'hot_restart',
+      strategyUsed: 'hot_restart',
       agentId,
       details: 'Hot restart command published',
     };
@@ -146,7 +146,7 @@ export class RecoveryEngine {
     if (!checkpoint) {
       return {
         success: false,
-        strategy: 'warm_restart',
+        strategyUsed: 'warm_restart',
         agentId,
         details: 'No checkpoint found for warm restart',
         nextStrategy: 'fresh_start',
@@ -160,7 +160,7 @@ export class RecoveryEngine {
 
     return {
       success: true,
-      strategy: 'warm_restart',
+      strategyUsed: 'warm_restart',
       agentId,
       details: `Warm restart from checkpoint ${checkpoint.id}`,
     };
@@ -171,7 +171,7 @@ export class RecoveryEngine {
 
     return {
       success: false,
-      strategy: 'escalate',
+      strategyUsed: 'escalate',
       agentId,
       details: 'Agent killed via escalation',
     };

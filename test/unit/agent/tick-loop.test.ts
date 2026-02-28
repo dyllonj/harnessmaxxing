@@ -71,7 +71,7 @@ function makeDefaultLimits(): BudgetLimits {
     tokensUsed: 20000,
     estimatedCostUsd: 200,
     wallTimeMs: 1200000,
-    invocations: 1000,
+    toolInvocations: 1000,
     apiCalls: 500,
   };
 }

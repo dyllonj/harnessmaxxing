@@ -31,7 +31,7 @@ export class Supervisor {
     this.config = config;
     this.bus = bus;
     this.healthAssessor = new HealthAssessor(config.healthPolicy);
-    this.recoveryEngine = new RecoveryEngine(bus, checkpointStore);
+    this.recoveryEngine = new RecoveryEngine(bus, checkpointStore, config.recovery);
   }
 
   async start(): Promise<void> {
@@ -133,11 +133,12 @@ export class Supervisor {
     verdict: HealthVerdict,
     child: ChildSpec,
   ): RecoveryStrategyType {
-    if (child.recoveryConfig.strategies.includes(verdict.recommendedAction)) {
+    const strategies = child.recoveryConfig?.strategies ?? this.config.recovery.strategies;
+    if (strategies.includes(verdict.recommendedAction)) {
       return verdict.recommendedAction;
     }
 
-    return child.recoveryConfig.strategies[0];
+    return strategies[0];
   }
 
   private startWatchdog(spec: ChildSpec): void {
@@ -148,7 +149,7 @@ export class Supervisor {
 
     const timeoutMs =
       (this.config.healthPolicy.maxMissedHeartbeats + 1) *
-      spec.tickIntervalMs;
+      spec.config.tickIntervalMs;
 
     const timer = setTimeout(() => {
       this.onWatchdogTimeout(spec.agentId);

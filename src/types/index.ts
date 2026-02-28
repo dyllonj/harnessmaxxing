@@ -49,8 +49,6 @@ export type {
   BudgetCheckResult,
   BudgetDimension,
   BudgetLimits,
-  EnforcerBudgetSnapshot,
-  EnforcerBudgetCheckResult,
 } from './budget.js';
 
 export { checkBudget } from './budget.js';
@@ -58,11 +56,12 @@ export { checkBudget } from './budget.js';
 export type {
   EffectStatus,
   EffectType,
+  EffectResult,
   Effect,
 } from './effect.js';
 
 export type {
-  ChatMessage,
+  LlmMessage,
   Task,
   CheckpointEffect,
   Checkpoint,

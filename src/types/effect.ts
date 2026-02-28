@@ -2,6 +2,12 @@ export type EffectStatus = 'registered' | 'executing' | 'committed' | 'failed' |
 
 export type EffectType = 'tool_call' | 'message_send' | 'sub_agent_spawn' | 'external_api';
 
+export type EffectResult = {
+  success: boolean;
+  output: unknown;
+  sideEffects: string[];
+};
+
 export type Effect = {
   id: string;
   agentId: string;
@@ -11,9 +17,10 @@ export type Effect = {
     action: string;
     parameters?: Record<string, unknown>;
     idempotencyKey?: string;
+    compensatingAction?: string;
   };
   status: EffectStatus;
-  result?: unknown;
+  result?: EffectResult;
   error?: string;
   timestamps: {
     registered: number;

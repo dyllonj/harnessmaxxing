@@ -1,6 +1,7 @@
 import type { LifecycleStateMachine } from '../lifecycle/state-machine.js';
 import type { LifecycleState } from '../types/lifecycle.js';
 import type { Heartbeat, SemanticHealth } from '../types/heartbeat.js';
+import type { HookRegistry } from '../types/hooks.js';
 import { buildHeartbeat } from '../heartbeat/heartbeat-builder.js';
 import type { BudgetEnforcer } from '../budget/budget-enforcer.js';
 import type { EffectLedger } from '../effects/effect-ledger.js';
@@ -38,6 +39,7 @@ export type TickLoopDeps<S extends Record<string, unknown> = Record<string, unkn
   inboxSource: InboxDrain;
   budgetEnforcer: BudgetEnforcer;
   effectLedger: EffectLedger;
+  hooks?: HookRegistry;
   clock?: { delay(ms: number): Promise<void> };
 };
 
@@ -119,6 +121,7 @@ export function createTickLoop<S extends Record<string, unknown>>(
         }
       }
       if (killed) {
+        await deps.hooks?.fire('PRE_KILL', { agentId: deps.agent.agentId, timestamp: Date.now(), reason: 'kill_message' });
         break;
       }
       if (messages.length > 0) {
@@ -146,10 +149,13 @@ export function createTickLoop<S extends Record<string, unknown>>(
           signals.sleepMs = ms;
         },
         budget: snapshot,
-        recordBudget(usage: Partial<import('../types/budget.js').EnforcerBudgetSnapshot>) {
+        recordBudget(usage: Partial<import('../types/budget.js').BudgetSnapshot>) {
           deps.budgetEnforcer.record(usage);
         },
       };
+
+      await deps.hooks?.fire('PRE_TICK', { agentId: deps.agent.agentId, timestamp: Date.now(), tickNumber: deps.agent.tick });
+      const tickStartMs = Date.now();
 
       try {
         await deps.agent.onTick(ctx);
@@ -162,7 +168,10 @@ export function createTickLoop<S extends Record<string, unknown>>(
         break;
       }
 
+      await deps.hooks?.fire('POST_TICK', { agentId: deps.agent.agentId, timestamp: Date.now(), tickNumber: deps.agent.tick, durationMs: Date.now() - tickStartMs });
+
       if (signals.sleepRequested) {
+        await deps.hooks?.fire('PRE_SLEEP', { agentId: deps.agent.agentId, timestamp: Date.now(), reason: 'agent_requested' });
         log.info({ sleepMs: signals.sleepMs }, 'Agent requested sleep');
         deps.stateMachine.apply('sleep');
         break;
@@ -182,7 +191,7 @@ export function createTickLoop<S extends Record<string, unknown>>(
             estimatedCostUsd: snapshot.estimatedCostUsd,
             wallTimeMs: snapshot.wallTimeMs,
             apiCalls: snapshot.apiCalls,
-            toolInvocations: snapshot.invocations,
+            toolInvocations: snapshot.toolInvocations,
           },
           {
             state: deps.stateMachine.state,
@@ -212,8 +221,10 @@ export function createTickLoop<S extends Record<string, unknown>>(
       const tickNumber = deps.agent.tick;
       if (forceCheckpoint || (tickNumber > 0 && tickNumber % cfg.checkpointEveryNTicks === 0)) {
         try {
+          await deps.hooks?.fire('PRE_CHECKPOINT', { agentId: deps.agent.agentId, timestamp: Date.now() });
           const checkpointState = await deps.agent.onCheckpoint(agentState);
           await deps.checkpointSink(checkpointState);
+          await deps.hooks?.fire('POST_CHECKPOINT', { agentId: deps.agent.agentId, timestamp: Date.now() });
           log.info({ tick: tickNumber }, 'Checkpoint saved');
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));

@@ -49,8 +49,6 @@ export type {
   BudgetCheckResult,
   BudgetDimension,
   BudgetLimits,
-  EnforcerBudgetSnapshot,
-  EnforcerBudgetCheckResult,
 } from './types/budget.js';
 
 export { checkBudget } from './types/budget.js';
@@ -58,11 +56,12 @@ export { checkBudget } from './types/budget.js';
 export type {
   EffectStatus,
   EffectType,
+  EffectResult,
   Effect,
 } from './types/effect.js';
 
 export type {
-  ChatMessage,
+  LlmMessage,
   Task,
   CheckpointEffect,
   Checkpoint,
@@ -76,7 +75,6 @@ export { computeChecksum, verifyChecksum } from './checkpoint/index.js';
 export { buildHeartbeat } from './heartbeat/index.js';
 
 export { Agent } from './agent/index.js';
-export { Watchdog } from './agent/index.js';
 export { createTickLoop } from './agent/index.js';
 
 export type {
@@ -87,8 +85,6 @@ export type {
   TickLoopDeps,
   AgentLike,
   TickLoop,
-  WatchdogConfig,
-  WatchdogSignal,
 } from './agent/index.js';
 
 export type { MessageBus } from './bus/index.js';

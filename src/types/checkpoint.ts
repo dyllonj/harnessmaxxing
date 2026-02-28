@@ -2,7 +2,7 @@ import type { LifecycleState } from './lifecycle.js';
 import type { BudgetSnapshot } from './budget.js';
 import type { Heartbeat } from './heartbeat.js';
 
-export type ChatMessage = {
+export type LlmMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   toolCallId?: string;
@@ -39,7 +39,7 @@ export type Checkpoint = {
 
   llmState: {
     systemPrompt: string;
-    conversationHistory: ChatMessage[];
+    conversationHistory: LlmMessage[];
     contextWindowUsage: number;
     modelId: string;
     temperature: number;

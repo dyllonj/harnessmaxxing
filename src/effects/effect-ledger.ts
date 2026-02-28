@@ -6,6 +6,7 @@ type EffectIntent = {
   action: string;
   parameters?: Record<string, unknown>;
   idempotencyKey?: string;
+  compensatingAction?: string;
 };
 
 const VALID_TRANSITIONS: Record<EffectStatus, EffectStatus[]> = {
@@ -25,7 +26,7 @@ export class EffectLedger {
     this.agentId = agentId;
   }
 
-  register(intent: EffectIntent, tick: number): string {
+  register(intent: EffectIntent, tick: number): Effect {
     const id = uuidv7();
     const effect: Effect = {
       id,
@@ -36,6 +37,7 @@ export class EffectLedger {
         action: intent.action,
         parameters: intent.parameters,
         idempotencyKey: intent.idempotencyKey,
+        compensatingAction: intent.compensatingAction,
       },
       status: 'registered',
       timestamps: {
@@ -44,7 +46,7 @@ export class EffectLedger {
     };
     this.effects.set(id, effect);
     this.effectOrder.push(id);
-    return id;
+    return effect;
   }
 
   markExecuting(effectId: string): void {
@@ -55,7 +57,7 @@ export class EffectLedger {
     this.transition(effectId, 'committed');
     const effect = this.effects.get(effectId)!;
     if (result !== undefined) {
-      effect.result = result;
+      effect.result = { success: true, output: result, sideEffects: [] };
     }
   }
 
@@ -63,6 +65,7 @@ export class EffectLedger {
     this.transition(effectId, 'failed');
     const effect = this.effects.get(effectId)!;
     effect.error = error;
+    effect.result = { success: false, output: error, sideEffects: [] };
   }
 
   compensate(effectId: string): void {

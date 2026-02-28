@@ -32,15 +32,20 @@ export type RecoveryConfig = {
 };
 
 export type ChildSpec = {
+  id: string;
   agentId: string;
-  budget: Budget;
-  tickIntervalMs: number;
-  recoveryConfig: RecoveryConfig;
+  config: {
+    budget: Budget;
+    tickIntervalMs: number;
+    checkpointEveryNTicks: number;
+  };
+  recoveryConfig?: RecoveryConfig;
 };
 
 export type SupervisorConfig = {
   strategy: 'one_for_one';
   healthPolicy: HealthPolicyConfig;
+  recovery: RecoveryConfig;
   children: ChildSpec[];
 };
 
@@ -55,9 +60,9 @@ export type HealthVerdict = {
 
 export type RecoveryResult = {
   success: boolean;
-  strategy: RecoveryStrategyType;
+  strategyUsed: RecoveryStrategyType;
   agentId: string;
-  details?: string;
+  details: string;
   nextStrategy?: RecoveryStrategyType;
 };
 

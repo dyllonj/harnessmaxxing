@@ -1,22 +1,22 @@
 import type {
   BudgetDimension,
   BudgetLimits,
-  EnforcerBudgetSnapshot,
-  EnforcerBudgetCheckResult,
+  BudgetSnapshot,
+  BudgetCheckResult,
 } from '../types/budget.js';
 
 const DIMENSIONS: BudgetDimension[] = [
   'tokensUsed',
   'estimatedCostUsd',
   'wallTimeMs',
-  'invocations',
+  'toolInvocations',
   'apiCalls',
 ];
 
 export class BudgetEnforcer {
   private readonly limits: BudgetLimits;
   private readonly softLimitPercent: number;
-  private consumption: EnforcerBudgetSnapshot;
+  private consumption: BudgetSnapshot;
 
   constructor(limits: BudgetLimits, softLimitPercent = 80) {
     this.limits = { ...limits };
@@ -25,12 +25,12 @@ export class BudgetEnforcer {
       tokensUsed: 0,
       estimatedCostUsd: 0,
       wallTimeMs: 0,
-      invocations: 0,
+      toolInvocations: 0,
       apiCalls: 0,
     };
   }
 
-  record(partial: Partial<EnforcerBudgetSnapshot>): void {
+  record(partial: Partial<BudgetSnapshot>): void {
     for (const dim of DIMENSIONS) {
       if (partial[dim] !== undefined) {
         this.consumption[dim] += partial[dim];
@@ -38,7 +38,7 @@ export class BudgetEnforcer {
     }
   }
 
-  check(): EnforcerBudgetCheckResult {
+  check(): BudgetCheckResult {
     const hardBreached: BudgetDimension[] = [];
     const softBreached: BudgetDimension[] = [];
 
@@ -59,11 +59,11 @@ export class BudgetEnforcer {
     return { status: 'ok', breachedDimensions: [] };
   }
 
-  snapshot(): EnforcerBudgetSnapshot {
+  snapshot(): BudgetSnapshot {
     return { ...this.consumption };
   }
 
-  restore(snapshot: EnforcerBudgetSnapshot): void {
+  restore(snapshot: BudgetSnapshot): void {
     this.consumption = { ...snapshot };
   }
 

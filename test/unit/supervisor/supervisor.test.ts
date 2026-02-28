@@ -3,7 +3,7 @@ import { Supervisor } from '@/supervisor/supervisor';
 import { InMemoryMessageBus } from '../../helpers/in-memory-message-bus';
 import { InMemoryCheckpointStore } from '../../helpers/in-memory-checkpoint-store';
 import type { Heartbeat } from '@/types/heartbeat';
-import type { SupervisorConfig, ChildSpec, RecoveryConfig } from '@/types/supervisor';
+import type { SupervisorConfig, ChildSpec } from '@/types/supervisor';
 import { createDefaultHealthPolicyConfig, createDefaultRecoveryConfig } from '@/types/supervisor';
 
 function createTestHeartbeat(overrides?: Partial<Heartbeat>): Heartbeat {
@@ -44,14 +44,18 @@ function createTestHeartbeat(overrides?: Partial<Heartbeat>): Heartbeat {
 
 function createChildSpec(overrides?: Partial<ChildSpec>): ChildSpec {
   return {
+    id: 'agent-1',
     agentId: 'agent-1',
-    budget: {
-      tokens: { soft: 8000, hard: 10000 },
-      costUsd: { soft: 1, hard: 2 },
-      wallTimeMs: { soft: 30000, hard: 60000 },
-      invocations: { soft: 50, hard: 100 },
+    config: {
+      budget: {
+        tokens: { soft: 8000, hard: 10000 },
+        costUsd: { soft: 1, hard: 2 },
+        wallTimeMs: { soft: 30000, hard: 60000 },
+        toolInvocations: { soft: 50, hard: 100 },
+      },
+      tickIntervalMs: 5000,
+      checkpointEveryNTicks: 10,
     },
-    tickIntervalMs: 5000,
     recoveryConfig: createDefaultRecoveryConfig(),
     ...overrides,
   };
@@ -61,6 +65,7 @@ function createSupervisorConfig(children?: ChildSpec[]): SupervisorConfig {
   return {
     strategy: 'one_for_one',
     healthPolicy: createDefaultHealthPolicyConfig(),
+    recovery: createDefaultRecoveryConfig(),
     children: children ?? [createChildSpec()],
   };
 }
@@ -132,7 +137,20 @@ describe('Supervisor', () => {
   });
 
   it('watchdog fires on missing heartbeats', async () => {
-    const child = createChildSpec({ tickIntervalMs: 1000 });
+    const child = createChildSpec({
+      id: 'agent-1',
+      agentId: 'agent-1',
+      config: {
+        budget: {
+          tokens: { soft: 8000, hard: 10000 },
+          costUsd: { soft: 1, hard: 2 },
+          wallTimeMs: { soft: 30000, hard: 60000 },
+          toolInvocations: { soft: 50, hard: 100 },
+        },
+        tickIntervalMs: 1000,
+        checkpointEveryNTicks: 10,
+      },
+    });
     const config = createSupervisorConfig([child]);
     // maxMissedHeartbeats defaults to 3, so timeout = (3+1) * 1000 = 4000ms
     const supervisor = new Supervisor(config, bus, store);
@@ -157,7 +175,20 @@ describe('Supervisor', () => {
   });
 
   it('watchdog resets on heartbeat receipt', async () => {
-    const child = createChildSpec({ tickIntervalMs: 1000 });
+    const child = createChildSpec({
+      id: 'agent-1',
+      agentId: 'agent-1',
+      config: {
+        budget: {
+          tokens: { soft: 8000, hard: 10000 },
+          costUsd: { soft: 1, hard: 2 },
+          wallTimeMs: { soft: 30000, hard: 60000 },
+          toolInvocations: { soft: 50, hard: 100 },
+        },
+        tickIntervalMs: 1000,
+        checkpointEveryNTicks: 10,
+      },
+    });
     const config = createSupervisorConfig([child]);
     const supervisor = new Supervisor(config, bus, store);
     await supervisor.start();
@@ -180,8 +211,8 @@ describe('Supervisor', () => {
   });
 
   it('one_for_one: only the failed agent is affected', async () => {
-    const child1 = createChildSpec({ agentId: 'agent-1' });
-    const child2 = createChildSpec({ agentId: 'agent-2' });
+    const child1 = createChildSpec({ id: 'agent-1', agentId: 'agent-1' });
+    const child2 = createChildSpec({ id: 'agent-2', agentId: 'agent-2' });
     const config = createSupervisorConfig([child1, child2]);
     const supervisor = new Supervisor(config, bus, store);
     await supervisor.start();
@@ -212,7 +243,20 @@ describe('Supervisor', () => {
   });
 
   it('stop() cleans up subscription and watchdogs', async () => {
-    const child = createChildSpec({ tickIntervalMs: 1000 });
+    const child = createChildSpec({
+      id: 'agent-1',
+      agentId: 'agent-1',
+      config: {
+        budget: {
+          tokens: { soft: 8000, hard: 10000 },
+          costUsd: { soft: 1, hard: 2 },
+          wallTimeMs: { soft: 30000, hard: 60000 },
+          toolInvocations: { soft: 50, hard: 100 },
+        },
+        tickIntervalMs: 1000,
+        checkpointEveryNTicks: 10,
+      },
+    });
     const config = createSupervisorConfig([child]);
     const supervisor = new Supervisor(config, bus, store);
     await supervisor.start();
@@ -233,7 +277,7 @@ describe('Supervisor', () => {
 
     expect(supervisor.getChildren()).toHaveLength(0);
 
-    supervisor.addChild(createChildSpec({ agentId: 'agent-new' }));
+    supervisor.addChild(createChildSpec({ id: 'agent-new', agentId: 'agent-new' }));
 
     expect(supervisor.getChildren()).toHaveLength(1);
     expect(supervisor.getChildren()[0].agentId).toBe('agent-new');
@@ -242,7 +286,20 @@ describe('Supervisor', () => {
   });
 
   it('removeChild() stops monitoring', async () => {
-    const child = createChildSpec({ tickIntervalMs: 1000 });
+    const child = createChildSpec({
+      id: 'agent-1',
+      agentId: 'agent-1',
+      config: {
+        budget: {
+          tokens: { soft: 8000, hard: 10000 },
+          costUsd: { soft: 1, hard: 2 },
+          wallTimeMs: { soft: 30000, hard: 60000 },
+          toolInvocations: { soft: 50, hard: 100 },
+        },
+        tickIntervalMs: 1000,
+        checkpointEveryNTicks: 10,
+      },
+    });
     const config = createSupervisorConfig([child]);
     const supervisor = new Supervisor(config, bus, store);
     await supervisor.start();

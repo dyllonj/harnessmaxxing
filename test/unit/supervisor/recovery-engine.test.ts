@@ -42,7 +42,7 @@ describe('RecoveryEngine', () => {
     const result = await engine.recover(verdict, 'hot_restart');
 
     expect(result.success).toBe(true);
-    expect(result.strategy).toBe('hot_restart');
+    expect(result.strategyUsed).toBe('hot_restart');
 
     const messages = bus.getMessages('stream:commands:agent-1');
     expect(messages).toHaveLength(1);
@@ -59,7 +59,7 @@ describe('RecoveryEngine', () => {
     const result = await engine.recover(verdict, 'warm_restart');
 
     expect(result.success).toBe(true);
-    expect(result.strategy).toBe('warm_restart');
+    expect(result.strategyUsed).toBe('warm_restart');
 
     const messages = bus.getMessages('stream:commands:agent-1');
     expect(messages).toHaveLength(1);
@@ -81,7 +81,7 @@ describe('RecoveryEngine', () => {
     const result = await engine.recover(verdict, 'escalate');
 
     expect(result.success).toBe(false);
-    expect(result.strategy).toBe('escalate');
+    expect(result.strategyUsed).toBe('escalate');
 
     const messages = bus.getMessages('stream:commands:agent-1');
     expect(messages).toHaveLength(1);
@@ -103,7 +103,7 @@ describe('RecoveryEngine', () => {
     // Third attempt should hit the limit and escalate
     const result = await engine.recover(verdict, 'hot_restart');
     expect(result.success).toBe(false);
-    expect(result.strategy).toBe('escalate');
+    expect(result.strategyUsed).toBe('escalate');
 
     // Kill command should have been published
     const messages = bus.getMessages('stream:commands:agent-1');

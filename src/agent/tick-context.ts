@@ -1,4 +1,4 @@
-import type { EnforcerBudgetSnapshot } from '../types/budget.js';
+import type { BudgetSnapshot } from '../types/budget.js';
 import type { EffectLedger } from '../effects/effect-ledger.js';
 
 export type InboxMessage = {
@@ -21,8 +21,8 @@ export type TickContext<S> = {
   inbox: InboxDrain;
   effects: EffectLedger;
   sleep(ms: number): void;
-  budget: EnforcerBudgetSnapshot;
-  recordBudget(usage: Partial<EnforcerBudgetSnapshot>): void;
+  budget: BudgetSnapshot;
+  recordBudget(usage: Partial<BudgetSnapshot>): void;
 };
 
 export type { EffectLedger } from '../effects/effect-ledger.js';

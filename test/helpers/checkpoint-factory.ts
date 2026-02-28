@@ -45,7 +45,8 @@ export function createTestCheckpoint(overrides?: Partial<Checkpoint>): Checkpoin
         tokensUsed: 100,
         estimatedCostUsd: 0.01,
         wallTimeMs: 5000,
-        invocations: 3,
+        toolInvocations: 3,
+        apiCalls: 2,
       },
       lastHeartbeat: {
         agentId: 'test-agent-001',

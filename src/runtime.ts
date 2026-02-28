@@ -6,7 +6,7 @@ import type { LifecycleState } from './types/lifecycle.js';
 import type { Heartbeat, SemanticHealth } from './types/heartbeat.js';
 import type { Checkpoint } from './types/checkpoint.js';
 import type { Message, Subscription } from './types/message.js';
-import type { Budget, BudgetLimits, BudgetSnapshot, EnforcerBudgetSnapshot } from './types/budget.js';
+import type { Budget, BudgetLimits, BudgetSnapshot } from './types/budget.js';
 import type { SupervisorConfig, ChildSpec } from './types/supervisor.js';
 import type { InboxDrain, InboxMessage, TickContext } from './agent/tick-context.js';
 import type { AgentLike, TickLoopDeps, TickLoop } from './agent/tick-loop.js';
@@ -18,6 +18,8 @@ import { Supervisor } from './supervisor/supervisor.js';
 import { buildHeartbeat } from './heartbeat/heartbeat-builder.js';
 import { computeChecksum } from './checkpoint/checksum.js';
 import { createDefaultRecoveryConfig } from './types/supervisor.js';
+import { createHookRegistry } from './lifecycle/hook-registry.js';
+import type { HookRegistry } from './types/hooks.js';
 
 export type RuntimeConfig = {
   redis?: { url: string };
@@ -61,6 +63,7 @@ type ManagedAgent = {
   stateMachine: LifecycleStateMachine;
   budgetEnforcer: BudgetEnforcer;
   effectLedger: EffectLedger;
+  hooks: HookRegistry;
   inboxSubscription: Subscription;
   lastCheckpointId: string | null;
   runPromise: Promise<void>;
@@ -140,7 +143,7 @@ function createCheckpointSink(
 ): (state: unknown) => Promise<void> {
   return async (state: unknown) => {
     const id = uuidv4();
-    const budgetSnap = enforcerSnapshotToBudgetSnapshot(budgetEnforcer.snapshot());
+    const budgetSnap = budgetEnforcer.snapshot();
     const committed = effectLedger.getCommitted();
     const pending = effectLedger.getPending();
 
@@ -192,7 +195,7 @@ function createCheckpointSink(
           agent.epoch,
           agent.tick,
           { status: 'healthy', progress: 0.5, coherence: 1, confidence: 1, stuckTicks: 0, lastMeaningfulAction: 'checkpoint' },
-          { tokensUsed: budgetSnap.tokensUsed, tokensRemaining: 0, estimatedCostUsd: budgetSnap.estimatedCostUsd, wallTimeMs: budgetSnap.wallTimeMs, apiCalls: 0, toolInvocations: budgetSnap.invocations },
+          { tokensUsed: budgetSnap.tokensUsed, tokensRemaining: 0, estimatedCostUsd: budgetSnap.estimatedCostUsd, wallTimeMs: budgetSnap.wallTimeMs, apiCalls: budgetSnap.apiCalls, toolInvocations: budgetSnap.toolInvocations },
           { state: stateMachine.state, currentTask: null, activeTools: [], pendingEffects: pending.length, subAgents: [], contextWindowUsage: 0, tickDurationMs: 0, tickRate: 0 },
         ),
         createdAt: Date.now(),
@@ -214,20 +217,11 @@ function budgetLimitsToSupervisorBudget(limits: BudgetLimits, softPercent = 80):
     tokens: { soft: soft(limits.tokensUsed), hard: limits.tokensUsed },
     costUsd: { soft: soft(limits.estimatedCostUsd), hard: limits.estimatedCostUsd },
     wallTimeMs: { soft: soft(limits.wallTimeMs), hard: limits.wallTimeMs },
-    invocations: { soft: soft(limits.invocations), hard: limits.invocations },
+    toolInvocations: { soft: soft(limits.toolInvocations), hard: limits.toolInvocations },
   };
 }
 
-function enforcerSnapshotToBudgetSnapshot(s: EnforcerBudgetSnapshot): BudgetSnapshot {
-  return {
-    tokensUsed: s.tokensUsed,
-    estimatedCostUsd: s.estimatedCostUsd,
-    wallTimeMs: s.wallTimeMs,
-    invocations: s.invocations,
-  };
-}
-
-export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
+export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHandle> {
   const redisUrl = config?.redis?.url ?? 'redis://localhost:6379';
   const sqlitePath = config?.sqlite?.path ?? './data/checkpoints.db';
   const logLevel = config?.logger?.level ?? 'info';
@@ -243,7 +237,7 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
     store = config._store;
   } else {
     // Dynamically import to avoid requiring better-sqlite3 when injected
-    const { SQLiteCheckpointStore } = require('./checkpoint/sqlite-checkpoint-store.js') as { SQLiteCheckpointStore: new (path: string) => CheckpointStore };
+    const { SQLiteCheckpointStore } = await import('./checkpoint/sqlite-checkpoint-store.js') as { SQLiteCheckpointStore: new (path: string) => CheckpointStore };
     store = new SQLiteCheckpointStore(sqlitePath);
     ownsStore = true;
   }
@@ -251,7 +245,7 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
   if (config?._bus) {
     bus = config._bus;
   } else {
-    const { RedisMessageBus } = require('./bus/redis-message-bus.js') as { RedisMessageBus: new (url: string) => MessageBus };
+    const { RedisMessageBus } = await import('./bus/redis-message-bus.js') as { RedisMessageBus: new (url: string) => MessageBus };
     bus = new RedisMessageBus(redisUrl);
     ownsBus = true;
   }
@@ -298,6 +292,7 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
 
     const budgetEnforcer = new BudgetEnforcer(agentDef.config.budget);
     const effectLedger = new EffectLedger(agentId);
+    const hooks = createHookRegistry(log);
     const agentLike = createAgentLikeFromHandler(agentId, agentDef.handler);
     agentLike.epoch = epoch;
     agentLike.tick = startTick;
@@ -330,6 +325,7 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
       inboxSource: inbox,
       budgetEnforcer,
       effectLedger,
+      hooks,
     };
 
     const tickLoop = createTickLoop(deps, {
@@ -343,10 +339,13 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
 
     if (supervisor) {
       const childSpec: ChildSpec = {
+        id: agentId,
         agentId,
-        budget: budgetLimitsToSupervisorBudget(agentDef.config.budget),
-        tickIntervalMs: agentDef.config.tickIntervalMs,
-        recoveryConfig: createDefaultRecoveryConfig(),
+        config: {
+          budget: budgetLimitsToSupervisorBudget(agentDef.config.budget),
+          tickIntervalMs: agentDef.config.tickIntervalMs,
+          checkpointEveryNTicks: agentDef.config.checkpointEveryNTicks,
+        },
       };
       supervisor.addChild(childSpec);
     }
@@ -359,6 +358,7 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
       stateMachine,
       budgetEnforcer,
       effectLedger,
+      hooks,
       inboxSubscription: subscription,
       lastCheckpointId: lastCheckpointIdRef.value,
       runPromise,
@@ -414,13 +414,12 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
   async function queryAgent(agentId: string): Promise<AgentStatus> {
     const managed = registry.get(agentId);
     if (managed) {
-      const snap = managed.budgetEnforcer.snapshot();
       return {
         id: agentId,
         state: managed.stateMachine.state,
         epoch: managed.agentLike.epoch,
         tick: managed.agentLike.tick,
-        budgetUsage: enforcerSnapshotToBudgetSnapshot(snap),
+        budgetUsage: managed.budgetEnforcer.snapshot(),
       };
     }
 
@@ -442,7 +441,7 @@ export function createRuntime(config?: RuntimeConfig): RuntimeHandle {
       state: 'DEAD',
       epoch: 0,
       tick: 0,
-      budgetUsage: { tokensUsed: 0, estimatedCostUsd: 0, wallTimeMs: 0, invocations: 0 },
+      budgetUsage: { tokensUsed: 0, estimatedCostUsd: 0, wallTimeMs: 0, toolInvocations: 0, apiCalls: 0 },
     };
   }
 
@@ -521,7 +520,7 @@ let defaultRuntime: RuntimeHandle | null = null;
 
 export async function spawn(agentDef: AgentDefinition): Promise<string> {
   if (!defaultRuntime) {
-    defaultRuntime = createRuntime();
+    defaultRuntime = await createRuntime();
   }
   return defaultRuntime.spawn(agentDef);
 }

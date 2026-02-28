@@ -12,7 +12,7 @@ const researchAgent: AgentDefinition = {
     }
 
     // Register a research effect
-    const effectId = ctx.effects.register(
+    const effect = ctx.effects.register(
       {
         type: 'tool_call',
         action: 'research_query',
@@ -23,16 +23,16 @@ const researchAgent: AgentDefinition = {
     );
 
     // Simulate work
-    ctx.effects.markExecuting(effectId);
+    ctx.effects.markExecuting(effect.id);
     await new Promise((resolve) => setTimeout(resolve, 10));
-    ctx.effects.commit(effectId, { findings: `Result for tick ${ctx.tick}` });
+    ctx.effects.commit(effect.id, { findings: `Result for tick ${ctx.tick}` });
 
     // Record budget usage
     ctx.recordBudget({
       tokensUsed: 100,
       estimatedCostUsd: 0.001,
       apiCalls: 1,
-      invocations: 1,
+      toolInvocations: 1,
     });
 
     // Track progress in state
@@ -44,7 +44,7 @@ const researchAgent: AgentDefinition = {
       tokensUsed: 100_000,
       estimatedCostUsd: 10,
       wallTimeMs: 600_000,
-      invocations: 1000,
+      toolInvocations: 1000,
       apiCalls: 500,
     },
     tickIntervalMs: 1000,

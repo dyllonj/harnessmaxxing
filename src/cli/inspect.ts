@@ -30,7 +30,8 @@ export function registerInspectCommand(program: Command): void {
       process.stdout.write(`  Tokens:    ${b.tokensUsed}\n`);
       process.stdout.write(`  Cost USD:  $${b.estimatedCostUsd.toFixed(4)}\n`);
       process.stdout.write(`  Wall Time: ${b.wallTimeMs}ms\n`);
-      process.stdout.write(`  Invocations: ${b.invocations}\n`);
+      process.stdout.write(`  Tool Invocations: ${b.toolInvocations}\n`);
+      process.stdout.write(`  API Calls: ${b.apiCalls}\n`);
 
       process.stdout.write(`\nEffects:\n`);
       process.stdout.write(`  Pending:   ${latest.externalState.pendingEffects.length}\n`);

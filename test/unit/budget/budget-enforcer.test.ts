@@ -7,7 +7,7 @@ function makeLimits(overrides?: Partial<BudgetLimits>): BudgetLimits {
     tokensUsed: 1000,
     estimatedCostUsd: 100,
     wallTimeMs: 600000,
-    invocations: 500,
+    toolInvocations: 500,
     apiCalls: 200,
     ...overrides,
   };
@@ -36,7 +36,7 @@ describe('BudgetEnforcer', () => {
     expect(snap.tokensUsed).toBe(100);
     expect(snap.estimatedCostUsd).toBe(0);
     expect(snap.wallTimeMs).toBe(0);
-    expect(snap.invocations).toBe(0);
+    expect(snap.toolInvocations).toBe(0);
     expect(snap.apiCalls).toBe(0);
   });
 
@@ -79,17 +79,17 @@ describe('BudgetEnforcer', () => {
   it('multiple dimensions breached', () => {
     const enforcer = new BudgetEnforcer(makeLimits({
       tokensUsed: 1000,
-      invocations: 500,
+      toolInvocations: 500,
     }));
-    enforcer.record({ tokensUsed: 1000, invocations: 500 });
+    enforcer.record({ tokensUsed: 1000, toolInvocations: 500 });
     const result = enforcer.check();
     expect(result.status).toBe('hard_limit');
     expect(result.breachedDimensions).toContain('tokensUsed');
-    expect(result.breachedDimensions).toContain('invocations');
+    expect(result.breachedDimensions).toContain('toolInvocations');
   });
 
   it('each of 5 dimensions independently tracked', () => {
-    const dims: BudgetDimension[] = ['tokensUsed', 'estimatedCostUsd', 'wallTimeMs', 'invocations', 'apiCalls'];
+    const dims: BudgetDimension[] = ['tokensUsed', 'estimatedCostUsd', 'wallTimeMs', 'toolInvocations', 'apiCalls'];
     for (const dim of dims) {
       const limits = makeLimits();
       const enforcer = new BudgetEnforcer(limits);
@@ -112,7 +112,7 @@ describe('BudgetEnforcer', () => {
 
   it('restore sets consumption', () => {
     const enforcer = new BudgetEnforcer(makeLimits());
-    enforcer.record({ tokensUsed: 100, invocations: 10 });
+    enforcer.record({ tokensUsed: 100, toolInvocations: 10 });
     const snap = enforcer.snapshot();
 
     const enforcer2 = new BudgetEnforcer(makeLimits());
