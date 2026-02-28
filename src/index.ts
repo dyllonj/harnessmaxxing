@@ -122,5 +122,15 @@ export { Supervisor } from './supervisor/index.js';
 export { EffectLedger } from './effects/index.js';
 export { BudgetEnforcer } from './budget/index.js';
 
+export type {
+  LlmCompletionRequest,
+  LlmTokenUsage,
+  LlmCompletionResponse,
+  LlmClient,
+  LlmClientConfig,
+} from './llm/index.js';
+
+export { createTrackedLlm, createAnthropicClient } from './llm/index.js';
+
 export { createRuntime, spawn, send, query, kill } from './runtime.js';
 export type { RuntimeHandle, RuntimeConfig, AgentDefinition, AgentStatus } from './runtime.js';

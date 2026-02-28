@@ -1,5 +1,6 @@
 import type { BudgetSnapshot } from '../types/budget.js';
 import type { EffectLedger } from '../effects/effect-ledger.js';
+import type { LlmClient } from '../llm/types.js';
 
 export type InboxMessage = {
   id: string;
@@ -23,6 +24,7 @@ export type TickContext<S> = {
   sleep(ms: number): void;
   budget: BudgetSnapshot;
   recordBudget(usage: Partial<BudgetSnapshot>): void;
+  llm?: LlmClient;
 };
 
 export type { EffectLedger } from '../effects/effect-ledger.js';

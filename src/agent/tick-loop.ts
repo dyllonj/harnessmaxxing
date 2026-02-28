@@ -6,6 +6,8 @@ import { buildHeartbeat } from '../heartbeat/heartbeat-builder.js';
 import type { BudgetEnforcer } from '../budget/budget-enforcer.js';
 import type { EffectLedger } from '../effects/effect-ledger.js';
 import type { InboxDrain, InboxMessage, TickContext } from './tick-context.js';
+import type { LlmClient } from '../llm/types.js';
+import { createTrackedLlm } from '../llm/create-tracked-llm.js';
 
 export type TickLoopConfig = {
   baseIntervalMs: number;
@@ -41,6 +43,7 @@ export type TickLoopDeps<S extends Record<string, unknown> = Record<string, unkn
   effectLedger: EffectLedger;
   hooks?: HookRegistry;
   clock?: { delay(ms: number): Promise<void> };
+  llmClient?: LlmClient;
 };
 
 export type TickLoop = {
@@ -153,6 +156,15 @@ export function createTickLoop<S extends Record<string, unknown>>(
           deps.budgetEnforcer.record(usage);
         },
       };
+
+      if (deps.llmClient) {
+        ctx.llm = createTrackedLlm(
+          deps.llmClient,
+          deps.effectLedger,
+          deps.agent.tick,
+          (usage) => deps.budgetEnforcer.record(usage),
+        );
+      }
 
       await deps.hooks?.fire('PRE_TICK', { agentId: deps.agent.agentId, timestamp: Date.now(), tickNumber: deps.agent.tick });
       const tickStartMs = Date.now();

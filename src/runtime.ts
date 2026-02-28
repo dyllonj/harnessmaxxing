@@ -46,6 +46,8 @@ export type AgentDefinition = {
     tickIntervalMs: number;
     checkpointEveryNTicks: number;
   };
+  llm?: import('./llm/types.js').LlmClient;
+  llmConfig?: { modelId: string; temperature: number };
 };
 
 export type AgentStatus = {
@@ -140,6 +142,7 @@ function createCheckpointSink(
   budgetEnforcer: BudgetEnforcer,
   effectLedger: EffectLedger,
   lastCheckpointIdRef: { value: string | null },
+  llmConfig?: { modelId: string; temperature: number },
 ): (state: unknown) => Promise<void> {
   return async (state: unknown) => {
     const id = uuidv4();
@@ -157,8 +160,8 @@ function createCheckpointSink(
         systemPrompt: '',
         conversationHistory: [],
         contextWindowUsage: 0,
-        modelId: '',
-        temperature: 0,
+        modelId: llmConfig?.modelId ?? '',
+        temperature: llmConfig?.temperature ?? 0,
       },
       externalState: {
         taskQueue: [],
@@ -315,6 +318,7 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
       budgetEnforcer,
       effectLedger,
       lastCheckpointIdRef,
+      agentDef.llmConfig,
     );
 
     const deps: TickLoopDeps<Record<string, unknown>> = {
@@ -326,6 +330,7 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
       budgetEnforcer,
       effectLedger,
       hooks,
+      ...(agentDef.llm ? { llmClient: agentDef.llm } : {}),
     };
 
     const tickLoop = createTickLoop(deps, {

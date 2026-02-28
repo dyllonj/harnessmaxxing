@@ -12,7 +12,7 @@ harnessmaxxing is a greenfield agent harness platform for persistent, long-runni
 - **Logging:** pino (structured JSON)
 - **Message bus:** Redis Streams via `ioredis` (behind `MessageBus` interface)
 - **Checkpoint store:** SQLite via `better-sqlite3` (behind `CheckpointStore` interface)
-- **CLI:** `commander` + `ink` (React for CLI)
+- **CLI:** `commander` + `process.stdout` (plain ANSI output)
 - **Serialization:** JSON throughout
 - **Config:** Plain TypeScript objects (no YAML, no TOML, no .env)
 
@@ -56,7 +56,7 @@ src/heartbeat/   -- Heartbeat types, emission logic
 src/lifecycle/   -- State machine, transitions, hooks
 src/effects/     -- Side effect ledger
 src/budget/      -- Budget types, enforcement
-src/cli/         -- Commander + ink CLI
+src/cli/         -- Commander CLI (plain ANSI output)
 src/types/       -- Shared type definitions
 test/unit/       -- Fast, deterministic tests
 test/integration/-- Tests requiring Redis/SQLite
