@@ -3,6 +3,7 @@ import type {
   LlmCompletionRequest,
   LlmCompletionResponse,
   LlmTokenUsage,
+  ContentBlock,
 } from '@/llm/types';
 import type { LlmMessage } from '@/types/checkpoint';
 
@@ -78,8 +79,11 @@ export function createMockResponse(
     ...overrides?.usage,
   };
 
+  const contentBlocks: ContentBlock[] = overrides?.content ?? [{ type: 'text', text: content }];
+
   return {
     message,
+    content: contentBlocks,
     usage,
     modelId: 'mock-model',
     stopReason: 'end_turn',
@@ -87,5 +91,28 @@ export function createMockResponse(
     // Ensure message and usage from overrides are merged properly
     ...(overrides?.message ? { message: overrides.message } : { message }),
     ...(overrides?.usage ? { usage } : { usage }),
+    ...(overrides?.content ? { content: overrides.content } : { content: contentBlocks }),
   };
+}
+
+export function createToolUseResponse(
+  toolName: string,
+  toolId: string,
+  input: Record<string, unknown>,
+  overrides?: Partial<LlmCompletionResponse>,
+): LlmCompletionResponse {
+  const toolUseBlock: ContentBlock = {
+    type: 'tool_use',
+    id: toolId,
+    name: toolName,
+    input,
+  };
+
+  const contentBlocks: ContentBlock[] = [toolUseBlock];
+
+  return createMockResponse('', {
+    stopReason: 'tool_use',
+    content: contentBlocks,
+    ...overrides,
+  });
 }

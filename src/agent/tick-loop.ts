@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { LifecycleStateMachine } from '../lifecycle/state-machine.js';
 import type { LifecycleState } from '../types/lifecycle.js';
 import type { Heartbeat, SemanticHealth } from '../types/heartbeat.js';
@@ -5,9 +6,14 @@ import type { HookRegistry } from '../types/hooks.js';
 import { buildHeartbeat } from '../heartbeat/heartbeat-builder.js';
 import type { BudgetEnforcer } from '../budget/budget-enforcer.js';
 import type { EffectLedger } from '../effects/effect-ledger.js';
-import type { InboxDrain, InboxMessage, TickContext } from './tick-context.js';
+import type { InboxDrain, TickContext } from './tick-context.js';
 import type { LlmClient } from '../llm/types.js';
 import { createTrackedLlm } from '../llm/create-tracked-llm.js';
+import type { ToolRegistry } from '../tools/tool-types.js';
+import { createTrackedToolSurface } from '../tools/create-tracked-tool.js';
+import type { TaskTracker } from '../tasks/task-tracker.js';
+import type { ElicitationRequest, PendingElicitation } from '../elicitation/elicitation-types.js';
+import type { SubAgentRequest } from '../spawning/spawning-types.js';
 
 export type TickLoopConfig = {
   baseIntervalMs: number;
@@ -20,6 +26,9 @@ export type TickLoopConfig = {
 type TickSignals = {
   sleepRequested: boolean;
   sleepMs: number;
+  elicitationRequested: boolean;
+  elicitationRequest: Omit<ElicitationRequest, 'id'> | null;
+  spawnRequests: SubAgentRequest[];
 };
 
 export type AgentLike<S extends Record<string, unknown> = Record<string, unknown>> = {
@@ -43,7 +52,18 @@ export type TickLoopDeps<S extends Record<string, unknown> = Record<string, unkn
   effectLedger: EffectLedger;
   hooks?: HookRegistry;
   clock?: { delay(ms: number): Promise<void> };
+
+  // Layer 1: Execution
   llmClient?: LlmClient;
+  toolRegistry?: ToolRegistry;
+
+  // Layer 2: Planning
+  taskTracker?: TaskTracker;
+  elicitationSink?: (request: ElicitationRequest) => Promise<void>;
+
+  // Layer 3: Delegation
+  spawnSink?: (parentAgentId: string, request: SubAgentRequest) => Promise<string>;
+  childAgentIds?: string[];
 };
 
 export type TickLoop = {
@@ -88,6 +108,7 @@ export function createTickLoop<S extends Record<string, unknown>>(
   };
 
   let running = false;
+  let currentElicitation: PendingElicitation | null = null;
 
   async function run(): Promise<void> {
     running = true;
@@ -132,7 +153,7 @@ export function createTickLoop<S extends Record<string, unknown>>(
       }
 
       // Step 3: Execute work
-      const signals: TickSignals = { sleepRequested: false, sleepMs: 0 };
+      const signals: TickSignals = { sleepRequested: false, sleepMs: 0, elicitationRequested: false, elicitationRequest: null, spawnRequests: [] };
       const agentState = deps.agent.state;
       if (agentState === null) {
         log.error({}, 'Agent state is null, cannot execute tick');
@@ -155,8 +176,35 @@ export function createTickLoop<S extends Record<string, unknown>>(
         recordBudget(usage: Partial<import('../types/budget.js').BudgetSnapshot>) {
           deps.budgetEnforcer.record(usage);
         },
+        ...(deps.taskTracker ? { tasks: deps.taskTracker } : {}),
       };
 
+      // Layer 1: Wire tools (optional)
+      if (deps.toolRegistry) {
+        ctx.tools = createTrackedToolSurface(
+          deps.toolRegistry,
+          deps.effectLedger,
+          deps.agent.tick,
+          (usage) => deps.budgetEnforcer.record(usage),
+        );
+      }
+
+      // Layer 2: Wire elicitation (optional)
+      if (deps.elicitationSink) {
+        ctx.askUser = (request: Omit<ElicitationRequest, 'id'>) => {
+          signals.elicitationRequested = true;
+          signals.elicitationRequest = request;
+        };
+      }
+
+      // Layer 3: Wire sub-agent spawning (optional)
+      if (deps.spawnSink) {
+        ctx.spawnSubAgent = (request: SubAgentRequest) => {
+          signals.spawnRequests.push(request);
+        };
+      }
+
+      // Layer 1: Wire LLM (optional)
       if (deps.llmClient) {
         ctx.llm = createTrackedLlm(
           deps.llmClient,
@@ -180,9 +228,40 @@ export function createTickLoop<S extends Record<string, unknown>>(
         break;
       }
 
-      await deps.hooks?.fire('POST_TICK', { agentId: deps.agent.agentId, timestamp: Date.now(), tickNumber: deps.agent.tick, durationMs: Date.now() - tickStartMs });
+      const tickDurationMs = Date.now() - tickStartMs;
+      await deps.hooks?.fire('POST_TICK', { agentId: deps.agent.agentId, timestamp: Date.now(), tickNumber: deps.agent.tick, durationMs: tickDurationMs });
+
+      // Post-tick: process deferred sub-agent spawn requests
+      if (signals.spawnRequests.length > 0 && deps.spawnSink) {
+        for (const spawnReq of signals.spawnRequests) {
+          try {
+            const childId = await deps.spawnSink(deps.agent.agentId, spawnReq);
+            deps.childAgentIds?.push(childId);
+            log.info({ childId, name: spawnReq.name }, 'Sub-agent spawned');
+          } catch (err) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            log.warn({ error: error.message, name: spawnReq.name }, 'Sub-agent spawn failed (non-fatal)');
+          }
+        }
+      }
+
+      // Post-tick: handle elicitation (blocks via sleep/wake)
+      if (signals.elicitationRequested && signals.elicitationRequest && deps.elicitationSink) {
+        const requestId = randomUUID();
+        const fullRequest: ElicitationRequest = {
+          id: requestId,
+          ...signals.elicitationRequest,
+        };
+        currentElicitation = { request: fullRequest, createdAt: Date.now() };
+        await deps.hooks?.fire('PRE_SLEEP', { agentId: deps.agent.agentId, timestamp: Date.now(), reason: 'awaiting_human' });
+        log.info({ requestId, question: fullRequest.question }, 'Agent requesting human input, transitioning to sleep');
+        await deps.elicitationSink(fullRequest);
+        deps.stateMachine.apply('sleep');
+        break;
+      }
 
       if (signals.sleepRequested) {
+        currentElicitation = null;
         await deps.hooks?.fire('PRE_SLEEP', { agentId: deps.agent.agentId, timestamp: Date.now(), reason: 'agent_requested' });
         log.info({ sleepMs: signals.sleepMs }, 'Agent requested sleep');
         deps.stateMachine.apply('sleep');
@@ -190,6 +269,12 @@ export function createTickLoop<S extends Record<string, unknown>>(
       }
 
       // Step 4: Emit heartbeat
+      const activeToolNames = deps.toolRegistry ? deps.toolRegistry.list().map((t) => t.name) : [];
+      const currentTask = deps.taskTracker
+        ? (deps.taskTracker.listInProgress()[0]?.description ?? null)
+        : null;
+      const subAgents = deps.childAgentIds ? [...deps.childAgentIds] : [];
+
       try {
         const health = deps.agent.assessHealth(ctx);
         const heartbeat = buildHeartbeat(
@@ -207,13 +292,16 @@ export function createTickLoop<S extends Record<string, unknown>>(
           },
           {
             state: deps.stateMachine.state,
-            currentTask: null,
-            activeTools: [],
+            currentTask,
+            activeTools: activeToolNames,
             pendingEffects: deps.effectLedger.getPending().length,
-            subAgents: [],
+            subAgents,
             contextWindowUsage: 0,
-            tickDurationMs: 0,
+            tickDurationMs,
             tickRate: 0,
+            pendingElicitation: currentElicitation
+              ? { requestId: currentElicitation.request.id, question: currentElicitation.request.question }
+              : undefined,
           },
         );
         await deps.heartbeatSink(heartbeat);

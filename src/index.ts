@@ -123,6 +123,11 @@ export { EffectLedger } from './effects/index.js';
 export { BudgetEnforcer } from './budget/index.js';
 
 export type {
+  TextBlock,
+  ToolUseBlock,
+  ToolResultBlock,
+  ContentBlock,
+  LlmToolDefinition,
   LlmCompletionRequest,
   LlmTokenUsage,
   LlmCompletionResponse,
@@ -132,5 +137,43 @@ export type {
 
 export { createTrackedLlm, createAnthropicClient } from './llm/index.js';
 
+// Tools
+export type {
+  ToolDefinition,
+  ToolHandler,
+  RegisteredTool,
+  ToolRegistry,
+  ToolSurface,
+  ToolInputSchema,
+} from './tools/index.js';
+
+export { createToolRegistry } from './tools/index.js';
+export { createTrackedToolSurface } from './tools/index.js';
+
+// Tasks
+export type { TaskTracker } from './tasks/index.js';
+export { createTaskTracker } from './tasks/index.js';
+
+// Elicitation
+export type {
+  ElicitationOption,
+  ElicitationType,
+  ElicitationRequest,
+  ElicitationResponse,
+  PendingElicitation,
+} from './elicitation/index.js';
+
+// Spawning
+export type {
+  SubAgentRequest,
+  SubAgentHandle,
+  SubAgentTool,
+  SpawnSignal,
+  ParentChildTracker,
+} from './spawning/index.js';
+
+export { createParentChildTracker } from './spawning/index.js';
+
+// Runtime
 export { createRuntime, spawn, send, query, kill } from './runtime.js';
-export type { RuntimeHandle, RuntimeConfig, AgentDefinition, AgentStatus } from './runtime.js';
+export type { RuntimeHandle, RuntimeConfig, AgentDefinition, AgentToolDefinition, AgentStatus } from './runtime.js';

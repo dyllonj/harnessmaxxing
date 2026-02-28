@@ -1,4 +1,9 @@
 export type {
+  TextBlock,
+  ToolUseBlock,
+  ToolResultBlock,
+  ContentBlock,
+  LlmToolDefinition,
   LlmCompletionRequest,
   LlmTokenUsage,
   LlmCompletionResponse,

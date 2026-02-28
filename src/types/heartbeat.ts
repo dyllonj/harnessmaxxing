@@ -29,6 +29,7 @@ export type ExecutionMetadata = {
   contextWindowUsage: number;
   tickDurationMs: number;
   tickRate: number;
+  pendingElicitation?: { requestId: string; question: string };
 };
 
 export type Heartbeat = {

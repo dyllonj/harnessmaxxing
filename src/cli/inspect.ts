@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { SQLiteCheckpointStore } from '../checkpoint/sqlite-checkpoint-store.js';
+import { stateColor, progressBar, formatDuration, formatCost, colorize, ansi } from './format.js';
 
 export function registerInspectCommand(program: Command): void {
   program
@@ -7,7 +8,8 @@ export function registerInspectCommand(program: Command): void {
     .description('Inspect an agent by ID')
     .argument('<agent-id>', 'Agent ID to inspect')
     .option('--db-path <path>', 'SQLite database path', './data/checkpoints.db')
-    .action(async (agentId: string, opts: { dbPath: string }) => {
+    .option('--json', 'Output raw JSON')
+    .action(async (agentId: string, opts: { dbPath: string; json?: boolean }) => {
       const store = new SQLiteCheckpointStore(opts.dbPath);
 
       const checkpoints = await store.list(agentId);
@@ -15,21 +17,34 @@ export function registerInspectCommand(program: Command): void {
 
       if (!latest) {
         process.stdout.write(`No checkpoints found for agent: ${agentId}\n`);
-        (store as unknown as { close(): void }).close();
+        store.close();
+        return;
+      }
+
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(latest, null, 2) + '\n');
+        store.close();
         return;
       }
 
       process.stdout.write(`\nAgent: ${agentId}\n`);
-      process.stdout.write(`State: ${latest.metadata.lifecycleState}\n`);
+      process.stdout.write(`State: ${stateColor(latest.metadata.lifecycleState)}\n`);
       process.stdout.write(`Epoch: ${latest.epoch}\n`);
       process.stdout.write(`Tick:  ${latest.tick}\n`);
       process.stdout.write(`Checkpoints: ${checkpoints.length}\n`);
 
-      process.stdout.write(`\nBudget Usage:\n`);
+      const cwUsage = latest.metadata.lastHeartbeat?.execution?.contextWindowUsage;
+      if (cwUsage !== undefined) {
+        process.stdout.write(`Context Window: ${(cwUsage * 100).toFixed(0)}% ${progressBar(cwUsage)}\n`);
+      }
+
+      process.stdout.write(`\n${colorize('Budget Usage', ansi.bold)}:\n`);
       const b = latest.metadata.budget;
-      process.stdout.write(`  Tokens:    ${b.tokensUsed}\n`);
-      process.stdout.write(`  Cost USD:  $${b.estimatedCostUsd.toFixed(4)}\n`);
-      process.stdout.write(`  Wall Time: ${b.wallTimeMs}ms\n`);
+      const totalTokens = b.tokensUsed + (latest.metadata.lastHeartbeat?.resources?.tokensRemaining ?? 0);
+      const tokenRatio = totalTokens > 0 ? b.tokensUsed / totalTokens : 0;
+      process.stdout.write(`  Tokens:    ${b.tokensUsed.toLocaleString()} ${progressBar(tokenRatio)}\n`);
+      process.stdout.write(`  Cost USD:  ${formatCost(b.estimatedCostUsd)}\n`);
+      process.stdout.write(`  Wall Time: ${formatDuration(b.wallTimeMs)}\n`);
       process.stdout.write(`  Tool Invocations: ${b.toolInvocations}\n`);
       process.stdout.write(`  API Calls: ${b.apiCalls}\n`);
 
@@ -47,6 +62,6 @@ export function registerInspectCommand(program: Command): void {
       }
 
       process.stdout.write('\n');
-      (store as unknown as { close(): void }).close();
+      store.close();
     });
 }

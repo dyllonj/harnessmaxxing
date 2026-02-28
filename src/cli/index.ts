@@ -5,6 +5,7 @@ import { registerListCommand } from './list.js';
 import { registerInspectCommand } from './inspect.js';
 import { registerKillCommand } from './kill.js';
 import { registerLogsCommand } from './logs.js';
+import { registerBudgetCommand } from './budget.js';
 
 const program = new Command();
 
@@ -18,5 +19,6 @@ registerListCommand(program);
 registerInspectCommand(program);
 registerKillCommand(program);
 registerLogsCommand(program);
+registerBudgetCommand(program);
 
 program.parse();

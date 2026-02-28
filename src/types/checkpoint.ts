@@ -1,10 +1,11 @@
 import type { LifecycleState } from './lifecycle.js';
 import type { BudgetSnapshot } from './budget.js';
 import type { Heartbeat } from './heartbeat.js';
+import type { ContentBlock } from '../llm/types.js';
 
 export type LlmMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentBlock[];
   toolCallId?: string;
   name?: string;
 };
@@ -15,6 +16,10 @@ export type Task = {
   status: 'pending' | 'in_progress' | 'completed' | 'failed';
   createdAt: number;
   completedAt?: number;
+  dependsOn: string[];
+  assignedTo: string | null;
+  priority: number;
+  metadata?: Record<string, unknown>;
 };
 
 export type CheckpointEffect = {

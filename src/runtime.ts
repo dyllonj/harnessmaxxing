@@ -20,6 +20,15 @@ import { computeChecksum } from './checkpoint/checksum.js';
 import { createDefaultRecoveryConfig } from './types/supervisor.js';
 import { createHookRegistry } from './lifecycle/hook-registry.js';
 import type { HookRegistry } from './types/hooks.js';
+import { createTaskTracker } from './tasks/task-tracker.js';
+import type { TaskTracker } from './tasks/task-tracker.js';
+import type { ToolRegistry } from './tools/tool-types.js';
+import type { ToolDefinition, ToolHandler } from './tools/tool-types.js';
+import { createToolRegistry } from './tools/tool-registry.js';
+import type { ElicitationRequest } from './elicitation/elicitation-types.js';
+import type { SubAgentRequest } from './spawning/spawning-types.js';
+import { createParentChildTracker } from './spawning/spawning-types.js';
+import type { ParentChildTracker } from './spawning/spawning-types.js';
 
 export type RuntimeConfig = {
   redis?: { url: string };
@@ -38,6 +47,11 @@ export type RuntimeHandle = {
   shutdown(): Promise<void>;
 };
 
+export type AgentToolDefinition = {
+  definition: ToolDefinition;
+  handler: ToolHandler;
+};
+
 export type AgentDefinition = {
   name: string;
   handler: (ctx: TickContext<Record<string, unknown>>) => Promise<void>;
@@ -48,6 +62,7 @@ export type AgentDefinition = {
   };
   llm?: import('./llm/types.js').LlmClient;
   llmConfig?: { modelId: string; temperature: number };
+  tools?: AgentToolDefinition[];
 };
 
 export type AgentStatus = {
@@ -65,6 +80,9 @@ type ManagedAgent = {
   stateMachine: LifecycleStateMachine;
   budgetEnforcer: BudgetEnforcer;
   effectLedger: EffectLedger;
+  taskTracker: TaskTracker;
+  toolRegistry: ToolRegistry | null;
+  parentChildTracker: ParentChildTracker;
   hooks: HookRegistry;
   inboxSubscription: Subscription;
   lastCheckpointId: string | null;
@@ -141,8 +159,10 @@ function createCheckpointSink(
   stateMachine: LifecycleStateMachine,
   budgetEnforcer: BudgetEnforcer,
   effectLedger: EffectLedger,
+  taskTracker: TaskTracker,
   lastCheckpointIdRef: { value: string | null },
   llmConfig?: { modelId: string; temperature: number },
+  parentChildTracker?: ParentChildTracker,
 ): (state: unknown) => Promise<void> {
   return async (state: unknown) => {
     const id = uuidv4();
@@ -164,8 +184,8 @@ function createCheckpointSink(
         temperature: llmConfig?.temperature ?? 0,
       },
       externalState: {
-        taskQueue: [],
-        completedTasks: [],
+        taskQueue: taskTracker.snapshot().pending,
+        completedTasks: taskTracker.snapshot().completed,
         keyValueStore: state as Record<string, unknown>,
         pendingEffects: pending.map((e) => ({
           id: e.id,
@@ -190,8 +210,8 @@ function createCheckpointSink(
       },
       metadata: {
         lifecycleState: stateMachine.state,
-        parentAgentId: null,
-        childAgentIds: [],
+        parentAgentId: parentChildTracker?.parentId ?? null,
+        childAgentIds: parentChildTracker?.getChildren() ?? [],
         budget: budgetSnap,
         lastHeartbeat: buildHeartbeat(
           agentId,
@@ -288,6 +308,8 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
     epoch: number,
     startTick: number,
     restoredState: Record<string, unknown> | null,
+    restoredTasks?: import('./types/checkpoint.js').Task[],
+    parentAgentId?: string | null,
   ): Promise<string> {
     const stateMachine = new LifecycleStateMachine();
     stateMachine.apply('spawn');
@@ -295,12 +317,23 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
 
     const budgetEnforcer = new BudgetEnforcer(agentDef.config.budget);
     const effectLedger = new EffectLedger(agentId);
+    const taskTracker = createTaskTracker(restoredTasks);
+    const parentChildTracker = createParentChildTracker(parentAgentId ?? null);
     const hooks = createHookRegistry(log);
     const agentLike = createAgentLikeFromHandler(agentId, agentDef.handler);
     agentLike.epoch = epoch;
     agentLike.tick = startTick;
     if (restoredState) {
       agentLike.state = restoredState;
+    }
+
+    // Build tool registry if tools provided
+    let toolRegistry: ToolRegistry | null = null;
+    if (agentDef.tools && agentDef.tools.length > 0) {
+      toolRegistry = createToolRegistry();
+      for (const tool of agentDef.tools) {
+        toolRegistry.register(tool.definition, tool.handler);
+      }
     }
 
     const { inbox, subscriptionPromise } = createMessageBusInbox(bus, agentId);
@@ -317,9 +350,39 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
       stateMachine,
       budgetEnforcer,
       effectLedger,
+      taskTracker,
       lastCheckpointIdRef,
       agentDef.llmConfig,
+      parentChildTracker,
     );
+
+    // Elicitation sink: publishes request on message bus
+    const elicitationSink = async (request: ElicitationRequest) => {
+      const channel = `stream:elicitation:${agentId}`;
+      const msg: Message = {
+        id: '',
+        channel,
+        timestamp: Date.now(),
+        payload: { type: 'elicitation_request', request },
+      };
+      await bus.publish(channel, msg);
+    };
+
+    // Spawn sink: creates child agents via the runtime
+    const spawnSink = async (parentId: string, request: SubAgentRequest): Promise<string> => {
+      const childDef: AgentDefinition = {
+        name: request.name,
+        handler: request.handler,
+        config: request.config,
+        llm: request.llm,
+        llmConfig: request.llmConfig,
+        tools: request.tools,
+      };
+      const childAgentId = `${request.name}-${uuidv4().slice(0, 8)}`;
+      await registerAgent(childAgentId, childDef, 0, 0, null, undefined, parentId);
+      parentChildTracker.addChild(childAgentId);
+      return childAgentId;
+    };
 
     const deps: TickLoopDeps<Record<string, unknown>> = {
       stateMachine,
@@ -329,8 +392,13 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
       inboxSource: inbox,
       budgetEnforcer,
       effectLedger,
+      taskTracker,
       hooks,
       ...(agentDef.llm ? { llmClient: agentDef.llm } : {}),
+      ...(toolRegistry ? { toolRegistry } : {}),
+      elicitationSink,
+      spawnSink,
+      childAgentIds: parentChildTracker.childIds,
     };
 
     const tickLoop = createTickLoop(deps, {
@@ -363,6 +431,9 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
       stateMachine,
       budgetEnforcer,
       effectLedger,
+      taskTracker,
+      toolRegistry,
+      parentChildTracker,
       hooks,
       inboxSubscription: subscription,
       lastCheckpointId: lastCheckpointIdRef.value,
@@ -398,10 +469,11 @@ export async function createRuntime(config?: RuntimeConfig): Promise<RuntimeHand
       supervisor.removeChild(agentId);
     }
 
-    // Re-register with incremented epoch
+    // Re-register with incremented epoch, restoring tasks from checkpoint
     const newEpoch = latest.epoch + 1;
     const restoredState = latest.externalState.keyValueStore;
-    await registerAgent(agentId, managed.definition, newEpoch, latest.tick, restoredState);
+    const restoredTasks = [...latest.externalState.taskQueue, ...latest.externalState.completedTasks];
+    await registerAgent(agentId, managed.definition, newEpoch, latest.tick, restoredState, restoredTasks);
     log.info({ agentId, newEpoch, fromTick: latest.tick }, 'Recovery successful');
   }
 

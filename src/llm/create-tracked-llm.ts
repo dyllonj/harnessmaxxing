@@ -17,6 +17,7 @@ export function createTrackedLlm(
           parameters: {
             modelId: req.modelId,
             messageCount: req.messages.length,
+            ...(req.tools ? { toolCount: req.tools.length } : {}),
           },
           idempotencyKey: undefined,
         },
@@ -41,10 +42,15 @@ export function createTrackedLlm(
         outputTokens: response.usage.outputTokens,
       });
 
+      const toolInvocations = response.content
+        ? response.content.filter((block) => block.type === 'tool_use').length
+        : 0;
+
       recordBudget({
         tokensUsed: response.usage.totalTokens,
         estimatedCostUsd: response.usage.estimatedCostUsd,
         apiCalls: 1,
+        ...(toolInvocations > 0 ? { toolInvocations } : {}),
       });
 
       return response;
